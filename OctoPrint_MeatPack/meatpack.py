@@ -8,6 +8,7 @@ MeatPackLookupTableValue = array('B', 256 * [0])
 
 MeatPackSpaceReplacedCharacter = 'E'
 MeatPackOmitWhitespaces = False
+MeatPackRemoveComments = True
 
 MeatPackReverseLookupTbl = {
     '0': 0b00000000,
@@ -28,6 +29,7 @@ MeatPackReverseLookupTbl = {
     '\0': 0b00001111  # never used, 0b1111 is used to indicate next 8-bits is a full character
 }
 
+MeatPackPackingActive = False;
 
 ArraysInitialized = False
 
@@ -101,6 +103,9 @@ def set_no_spaces(no_spaces):
         MeatPackLookupTablePackable[ord(MeatPackSpaceReplacedCharacter)] = 0
         MeatPackLookupTablePackable[ord(' ')] = 1
 
+def set_remove_comments(remove_comments):
+    global MeatPackRemoveComments
+    MeatPackRemoveComments = remove_comments
 
 # -------------------------------------------------------------------------------
 def get_command_bytes(command):
@@ -216,16 +221,25 @@ def pack_file(in_filename, out_filename):
 
     bts = bytearray()
 
-    bts.append(MPCommand_SignalByte)
-    bts.append(MPCommand_SignalByte)
-    bts.append(MPCommand_EnablePacking)
+    MeatPackPackingActive = False;
 
     for line in file_data_lines:
-        bts += pack_line(line)
-
-    bts.append(MPCommand_SignalByte)
-    bts.append(MPCommand_SignalByte)
-    bts.append(MPCommand_ResetAll)
+        if not MeatPackRemoveComments and line[0] == ';':
+            if MeatPackPackingActive:
+                bts.append(MPCommand_SignalByte)
+                bts.append(MPCommand_SignalByte)
+                bts.append(MPCommand_DisablePacking)
+                MeatPackPackingActive = False;
+            bts += bytearray(line, 'utf8')
+        else:
+            new_bts = pack_line(line)
+            if len(new_bts) > 0:
+                if not MeatPackPackingActive:
+                    bts.append(MPCommand_SignalByte)
+                    bts.append(MPCommand_SignalByte)
+                    bts.append(MPCommand_EnablePacking)
+                    MeatPackPackingActive = True;
+                bts += pack_line(line)
 
     out_file.write(bts)
     out_file.flush()
